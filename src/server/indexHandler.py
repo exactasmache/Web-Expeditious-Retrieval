@@ -17,5 +17,3 @@ with ix.searcher() as searcher:
     query = QueryParser("content", ix.schema).parse("first")
     results = searcher.search(query)
     print(results[0])
-
-# {"title": u"First document", "path": u"/a"}

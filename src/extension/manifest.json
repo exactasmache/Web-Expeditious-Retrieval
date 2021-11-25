@@ -3,10 +3,21 @@
   "description": "Web Expeditious Retrieval Challenge",
   "version": "0.1.1",
   "manifest_version": 3,
+  "omnibox": { 
+    "keyword": "WER" 
+  },
   "content_scripts": [
     {
-      "matches": ["http://localhost/*"],
-      "js": ["content.js"]
+      "matches": [
+        "http://*/*","https://*/*"
+      ],
+      "js": ["content.js"],
+      "exclude_matches": [
+        "http://localhost/*"
+      ]
     }
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }

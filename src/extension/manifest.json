@@ -1,0 +1,12 @@
+{
+  "name": "WER",
+  "description": "Web Expeditious Retrieval Challenge",
+  "version": "0.1.1",
+  "manifest_version": 3,
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*"],
+      "js": ["content.js"]
+    }
+  ]
+}

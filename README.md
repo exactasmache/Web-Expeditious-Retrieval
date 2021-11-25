@@ -1,1 +1,2 @@
-# Web-Expeditious-Retrieval
+# Web Expeditious Retrieval
+The goal of this repository is to store an implementation of a Chrome extension that allows users to search through a shared navigation history. That is, the extension should be able to observe and record the sites visited by the users, and also allow users to perform a text-based search over the visited sites (i.e., searching over the textual contents of visited sites). In order to share the navigation history of multiple users, a backend service also needs to be implemented providing the means to perform text-based search over the unified navigation history.

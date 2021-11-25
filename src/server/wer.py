@@ -12,6 +12,10 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(f"<h1>WER service online</h1>".encode('utf-8'))
 
+    def do_POST(self):
+        """Handles POST requests."""
+        pass
+
 
 if __name__ == "__main__":
     hostName = 'localhost'

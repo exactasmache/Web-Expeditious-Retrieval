@@ -94,18 +94,18 @@ chrome.runtime.onMessage.addListener(
   (request, sender, sendResponse) => {
 
     const url = sender.tab.url;
-    console.log(sender);
-    console.log(request);
-
+    const title = sender.tab.title;
+    
     if (request.method === "store") {
       const md5 = request.hash;
 
       if (cache.has_and_update(md5))
-        sendResponse({ message: "Text already cached." });
-
+        return sendResponse({ message: "Text already cached." });
+      
       data = {
         text: request.text,
-        url: url
+        url: url,
+        title: title
       }
       text = request.text
       fetch(`${API_url}/store`, {

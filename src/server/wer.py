@@ -7,6 +7,30 @@ import json
 from indexHandler import Multiindex
 
 
+def build_response(res):
+    body = """ <!DOCTYPE html>
+              <html>
+                <head>
+                  <title>Results</title>
+                </head>
+                <body>
+                <h1>Results</h1>
+            """
+    if not res:
+        body += "<p>Sorry, no page was found using that word.</p>"
+
+    else:
+        body += "<ul>"
+        for r in res:
+            body += f'<a href=\"{r["url"]}\"><li>{r["title"]}</li></a>'
+        body += "</ul>"
+
+    body += """</body>
+            </html>
+          """
+    return body
+
+
 class WERRequestHandler(BaseHTTPRequestHandler):
     """This class handles HTTP request for the WER service."""
     _ix_path = 'indexdir'
@@ -43,25 +67,27 @@ class WERRequestHandler(BaseHTTPRequestHandler):
                     or len(word['q']) > 1:
                 return self.error(400)
 
-            print("Searching", word['q'][0])
+            print(" > Searching", word['q'][0])
             try:
-                res = self._index.search_word(self._default_usr, "hola")
+                res = self._index.search_word(self._default_usr, word['q'][0])
+                if res is False:
+                    return self.error(500)
+
             except Exception as e:
                 print(e)
                 return self.error(500)
 
             print("Result:", [r for r in res])
-            body = f"<h1>Sorry, no page was found using that word.</h1>"
-            if res:
-                body = "<ol>"
-                for r in res:
-                    body += f"<li>{r}</li>"
-                body = "</ol>"
-
+            body = build_response(res)
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
             self.wfile.write(body.encode('utf-8'))
+
+        elif path.startswith('/favicon.ico'):
+            self.send_response(200)
+            self.end_headers()
+
         else:
             self.error(403)
 
@@ -76,15 +102,21 @@ class WERRequestHandler(BaseHTTPRequestHandler):
                 bytes_val = self.rfile.read(length)
                 my_json = bytes_val.decode('utf8')
                 postvars = json.loads(my_json)
-                print(type(postvars))
-                if 'url' not in postvars.keys() or \
-                        'text' not in postvars.keys():
+
+                if not postvars or 'url' not in postvars.keys() or \
+                        'text' not in postvars.keys() or \
+                        'title' not in postvars.keys():
                     self.error(400)
 
             try:
-                print(postvars)
-                # TODO: Store the texts in the index.
-                # print(pformat(postvars))
+                res = self._index.add_document(
+                    self._default_usr, postvars['url'],
+                    postvars['title'],
+                    postvars['text']
+                )
+
+                if not res:
+                    return self.error(500)
 
                 data = {'message': 'Saved'}
                 body = json.dumps(data)
@@ -97,8 +129,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
 
             except Exception as e:
                 print(e)
-                self.send_response(500)
-                self.end_headers()
+                self.error(500)
 
         except Exception as e:
             print(e)

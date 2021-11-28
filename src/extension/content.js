@@ -6,22 +6,23 @@ getPlainText = () => {
 
 storeText = (url) => {
   const ptext = getPlainText();
-  console.log(ptext)
+  const md5 = MD5(`${url} ${ptext}`);
+  console.log(ptext);
+  console.log(md5);
   chrome.runtime.sendMessage(
     {
       method: "store",
-      hash: MD5(`${url} ${ptext}`),
+      hash: md5,
       text: ptext
-    }, function (res) {
+    },
+    (res) => {
       console.log("RES", res)
-    }
-  );
+    });
 };
 
 /**
  * Whenever a tab or a page is opened we ask the background for the
  * existence of that page in the index, so we generate a hash with 
  * all the text (and the url) and send it to the background script */
-// TODO: This function must be called whenever the page is changed.
-let url = location.href;
+const url = location.href;
 storeText(url);

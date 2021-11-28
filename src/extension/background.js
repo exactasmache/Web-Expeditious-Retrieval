@@ -1,127 +1,201 @@
-/** Data structures */
-class ListNode {
-  constructor(data) {
-    this.data = data
-    this.pointer = null
-  }
 
-  val = () => { return this.data; }
-
-  next() { return this.pointer; }
-
-  set_next(node) { this.pointer = node; }
-}
-
-class Cache {
+class CacheHandler {
   /**
-   * This is a naive implementation of a cache. 
-   * Since Extensions can store up to 5MB of data in localStorage
-   * if we want to really scale it, we have to add an endpoint to 
-   * the server and implement it there.
+   * Object merged with a linked list.
+   * Example of accepted cache.
    * 
-   * One problem with this implementation comes when we access
-   * to a site that is cached in the middle of the list. In
-   * that case we have to iterate over all the linked list to
-   * find that element in order to put it at the end.
-   * 
-   * @param {*} maxSize 
+   * cache = {
+   *   dl_list: {e1: {prev: null, next: e2}, e2: {prev: e1: next: null}}
+   *   head: e1
+   *   tail: e2
+   *   size: 2
+   *   maxSize: 10
+   * }
    */
+  constructor() { }
 
-  constructor(maxSize) {
-    this.head = null;
-    this.tail = null;
-    this.hashes = new Set();
-    this.size = 0;
-    this.maxSize = maxSize;
+  has = (cache, element) => cache.dl_list.hasOwnProperty(element);
+
+  has_and_update = (cache, element) => {
+    if (!cache.dl_list.hasOwnProperty(element))
+      return false;
+
+    // If element is the head, we are done.
+    let p_elem = cache.dl_list[element];
+    if (!p_elem.next)
+      return true;
+
+    // Removes the element from the linked list.
+    if (!p_elem.prev) {
+      cache.dl_list[p_elem.next].prev = null;
+      cache.head = p_elem.next;
+    } else {
+      cache.dl_list[p_elem.prev].next = p_elem.next;
+    }
+    cache.dl_list[p_elem.next].prev = p_elem.prev;
+
+    // Appends element at the end of the linked list
+    let p_tail = cache.dl_list[cache.tail];
+    p_elem.next = null;
+    p_elem.prev = cache.tail;
+    p_tail.next = element;
+    cache.tail = element;
+    return true;
   }
 
-  has = (element) => {
-    return this.hashes.has(element);
-  }
+  add = (cache, value) => {
+    let newNode = {
+      prev: null,
+      next: null
+    };
+    if (cache.tail != null) {
+      cache.dl_list[cache.tail].next = value;
+      newNode.prev = cache.tail;
+    } else {
+      cache.head = value;
+    }
+    cache.tail = value;
+    cache.dl_list[value] = newNode;
 
-  has_and_update = (element) => {
-    // TODO: In this case I had to put the element 
-    // at the end of the list
-    return this.hashes.has(element);
-  }
-
-  add = (element) => {
-    const newNode = new ListNode(element);
-    this.hashes.add(element);
-
-    if (this.tail != null)
-      this.tail.set_next(newNode);
-    else
-      this.head = newNode;
-
-    this.tail = newNode;
-    if (this.size < this.maxSize)
-      this.size++;
-    else {
-      this.hashes.delete(this.head.val())
-      this.head = this.head.next();
+    if (cache.size < cache.maxSize) {
+      cache.size++;
+    } else {
+      let new_head = cache.dl_list[cache.head].next;
+      cache.dl_list.delete(cache.head)
+      cache.head = new_head;
+      cache.dl_list[cache.head].prev = null;
     }
   }
 }
 
 
 /** Global variables */
-let cache = new Cache(2);   //TODO: set to 10
-const API_scheme = 'http'
-const API_host = 'localhost:8888'
-const API_url = `${API_scheme}://${API_host}`
+const MAXSIZE = 10;
+const API_scheme = 'http';
+const API_host = 'localhost:8888';
+const API_url = `${API_scheme}://${API_host}`;
+const API_newIndex = 'newindex';
+const API_search = 'search';
+const cacheHandler = new CacheHandler();
+let cache;
 
-/** Global Functions */
-encode_utf8 = (s) => encodeURIComponent(s);
+const encode_utf8 = (s) => encodeURIComponent(s);
 
-inputEntered = (text) => {
+const inputEntered = (text) => {
   const e_text = encodeURIComponent(text);
-  const searchURL = `${API_url}/search/q=${e_text}`;
-  
-  chrome.tabs.create({url: searchURL})
-  .catch( err => {
-    console.log('ERROR', err);
-  });
+  const searchURL = `${API_url}/${API_search}/q=${e_text}`;
+
+  chrome.tabs.create({ url: searchURL })
+    .catch(err => {
+      console.log('ERROR', err);
+    });
 };
 
+const newCache = () => {
+  return {
+    dl_list: {},
+    head: null,
+    tail: null,
+    size: 0,
+    maxSize: MAXSIZE
+  };
+};
+
+const initStorageCache = chrome.storage.sync.get(['cache'])
+  .then(items => {
+    cache = JSON.parse(items.cache);
+  })
+  .catch(error => {
+    console.log("ERROR: retrieving the cache!", error);
+  });
+
+const saveStorageCache = (cache2save) =>
+  chrome.storage.sync.set({ cache: JSON.stringify(cache2save) });
 
 /** Event listeners */
-chrome.omnibox.onInputEntered.addListener(inputEntered);
 
-/* It receives the message from the content script and sends it
-   to the server in order to add it to the index. */
+/**
+ * Creates a new index.
+ * Creates a new cache.
+ */
+chrome.runtime.onInstalled.addListener(() => {
+  fetch(`${API_url}/${API_newIndex}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  })
+    .then(() => {
+      console.log("New index created.");
+      saveStorageCache(newCache())
+        .then(() => console.log("New cache backuped."));
+    })
+    .catch((error) => {
+      console.log("Unable to create the index or cache.", error)
+    });
+});
+
+/** Read a bit more abount async functions and refactor this function */
+async function storeRequest(request, sender) {
+  const md5 = request.hash;
+  if (cache == undefined) {
+    try {
+      await initStorageCache;
+    } catch (e) {
+      console.log("ERROR", e);
+      cache = newCache();
+    }
+  }
+  if (cacheHandler.has_and_update(cache, md5))
+    return { message: "Text already cached." };
+
+  data = {
+    text: request.text,
+    url: sender.tab.url,
+    title: sender.tab.title
+  }
+  text = request.text
+  fetch(`${API_url}/store`, {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' }
+  })
+    .then(() => {
+      cacheHandler.add(cache, md5);
+      console.log("Hash added to the cache", cache);
+
+      saveStorageCache(cache)
+        .then(() => {
+          console.log("Cache backuped")
+          return { message: "Cache backuped" }
+        });
+    })
+    .catch((error) => {
+      console.log("Unable to store the text.", error)
+      return { message: "Unable to store the text." }
+    });
+}
+
+/** It receives the message from the content script and,
+ * if it is not cached, sends it to the server in order 
+ * to add it to the index. */
 chrome.runtime.onMessage.addListener(
   (request, sender, sendResponse) => {
+    if (request.method != "store")
+      sendResponse(false);
 
-    const url = sender.tab.url;
-    const title = sender.tab.title;
-    
-    if (request.method === "store") {
-      const md5 = request.hash;
+    const md5 = request.hash;
+    if (cache != undefined && cacheHandler.has_and_update(cache, md5))
+      return sendResponse({ message: "Text already cached." });
 
-      if (cache.has_and_update(md5))
-        return sendResponse({ message: "Text already cached." });
-      
-      data = {
-        text: request.text,
-        url: url,
-        title: title
-      }
-      text = request.text
-      fetch(`${API_url}/store`, {
-        method: "POST",
-        body: JSON.stringify(data),
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      })
-        .then(() => {
-          cache.add(md5);
-          console.log("Text saved.");
-        })
-        .catch((error) =>
-          console.log("Could not store the text.", error));
-    }
-    sendResponse(true);
-  }
-);
+    storeRequest(request, sender).then(
+      (response) => {
+        console.log("Response:", response);
+        sendResponse(response);
+      });
+    return true; // return true to send a response asynchronously
+  });
+
+
+chrome.omnibox.onInputEntered.addListener(inputEntered);

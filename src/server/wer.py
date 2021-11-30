@@ -8,7 +8,17 @@ import json
 from indexHandler import Multiindex
 
 
-def build_response(res):
+def build_response(res: list = None):
+    """
+      Creates an html response with the listed results
+
+      :param res: list of results of the searching.
+      Every element must be a dictionary containing an url and a title.
+
+      Returns the html code.
+      :rtype: str
+    """
+
     body = """ <!DOCTYPE html>
               <html>
                 <head>
@@ -38,7 +48,12 @@ class WERRequestHandler(BaseHTTPRequestHandler):
     _index = Multiindex(_ix_path)
     _default_usr = 'Anonimous'
 
-    def error(self, code=500, message=None):
+    def error(self, code: int = 500, message: str = None):
+        """Returns an error response
+
+          :param code: error code.
+          :param message: error message.
+        """
         self.send_response(code)
 
         if message:
@@ -50,7 +65,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def search(self):
-        """Handles the search request."""
+        """Handles the /search request."""
         path = self.path
         subpaths = path.split('/')
 
@@ -83,7 +98,12 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
 
-    def store(self, postvars):
+    def store(self, postvars: dict):
+        """Saves the document in the index _index
+
+          :param postvars: dictionary with the url title and text of the
+          document to be added.
+        """
         res = self._index.add_document(
             self._default_usr, postvars['url'],
             postvars['title'],
@@ -156,6 +176,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
             self.error(406)
 
     def do_OPTIONS(self):
+        """Handles OPTIONS request."""
         self.send_response(200)
         self.send_header('Access-Control-Allow-Credentials', 'true')
         self.send_header('Access-Control-Allow-Origin', '*')

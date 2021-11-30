@@ -1,5 +1,5 @@
 # Custom
-indexdir/
+src/server/indexdir/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,8 +1,14 @@
+/**
+ * @author Marcelo Bianchetti <mbianchetti@dc.uba.ar>
+ */
 
 class CacheHandler {
   /**
-   * Object merged with a linked list.
-   * Example of accepted cache.
+   * Class to group all the functions developed in order to handle the 
+   * cache, which is practicaly an Object with some functionalities 
+   * inherited of a double linked list.
+   * 
+   * Example of accepted cache:
    * 
    * cache = {
    *   dl_list: {e1: {prev: null, next: e2}, e2: {prev: e1: next: null}}
@@ -11,21 +17,43 @@ class CacheHandler {
    *   size: 2
    *   maxSize: 10
    * }
+   * We use this structure in order to be able to stringify and backup it
+   * into the storage. Otherwise we could have a class.
+   * Another option is to use indexDB, but I'm not really sure if we can
+   * access it from the extension.
    */
   constructor() { }
 
-  has = (cache, element) => cache.dl_list.hasOwnProperty(element);
+  /**
+   * Returns whether 'item' belongs to cache.
+   * 
+   * @param {Object} cache  - The cache in which to search.
+   * @param {string} item   - The item to search into the cache.
+   * @returns {boolean}     - False if 'item' does not belong to
+   *                          the cache.
+   */
+  has = (cache, item) => cache.dl_list.hasOwnProperty(item);
 
-  has_and_update = (cache, element) => {
-    if (!cache.dl_list.hasOwnProperty(element))
+  /**
+   * Returns whether 'item' belongs to cache. 
+   * If so, it updates the cache, realocating 'item' 
+   * at the tail.
+   * 
+   * @param {Object} cache  - The cache in which to search.
+   * @param {string} item   - The item to search into the cache.
+   * @returns {boolean}     - False if 'item' does not belong to
+   *                          the cache. True otherwise.
+   */
+  has_and_update = (cache, item) => {
+    if (!cache.dl_list.hasOwnProperty(item))
       return false;
 
-    // If element is the head, we are done.
-    let p_elem = cache.dl_list[element];
+    // If 'item' is the head, we are done.
+    let p_elem = cache.dl_list[item];
     if (!p_elem.next)
       return true;
 
-    // Removes the element from the linked list.
+    // Removes 'item' from the linked list.
     if (!p_elem.prev) {
       cache.dl_list[p_elem.next].prev = null;
       cache.head = p_elem.next;
@@ -34,34 +62,47 @@ class CacheHandler {
     }
     cache.dl_list[p_elem.next].prev = p_elem.prev;
 
-    // Appends element at the end of the linked list
+    // Appends 'item' at the end of the linked list
     let p_tail = cache.dl_list[cache.tail];
     p_elem.next = null;
     p_elem.prev = cache.tail;
-    p_tail.next = element;
-    cache.tail = element;
+    p_tail.next = item;
+    cache.tail = item;
     return true;
   }
 
-  add = (cache, value) => {
+  /**
+   * Adds the 'item' to the end of the cache. 
+   * It assumes that the 'item' does not belong in the cache.
+   * 
+   * @param {Object} cache  - The cache in which to add the item.
+   * @param {string} item   - The item to add to the cache.
+   */
+  add = (cache, item) => {
+    // Initializes the node to add
     let newNode = {
       prev: null,
       next: null
     };
+
+    // Adds the item as the tail
     if (cache.tail != null) {
-      cache.dl_list[cache.tail].next = value;
+      cache.dl_list[cache.tail].next = item;
       newNode.prev = cache.tail;
     } else {
-      cache.head = value;
+      // Corner case: the cache is empty
+      cache.head = item;
     }
-    cache.tail = value;
-    cache.dl_list[value] = newNode;
+    cache.tail = item;
+    cache.dl_list[item] = newNode;
 
     if (cache.size < cache.maxSize) {
       cache.size++;
     } else {
+      // Corner case: the cache reaches its limit
+      // so it removes the head.
       let new_head = cache.dl_list[cache.head].next;
-      cache.dl_list.delete(cache.head)
+      delete cache.dl_list[cache.head];
       cache.head = new_head;
       cache.dl_list[cache.head].prev = null;
     }
@@ -70,132 +111,193 @@ class CacheHandler {
 
 
 /** Global variables */
-const MAXSIZE = 10;
-const API_scheme = 'http';
-const API_host = 'localhost:8888';
-const API_url = `${API_scheme}://${API_host}`;
-const API_newIndex = 'newindex';
-const API_search = 'search';
-const cacheHandler = new CacheHandler();
-let cache;
+const API_scheme = 'http';                      // Server scheme
+const API_host = 'localhost:8888';              // Server host and port 
+const API_url = `${API_scheme}://${API_host}`;  // Server complete URL
+const API_newIndex = 'newindex';                // Endpoint for creating a new index
+const API_search = 'search';                    // Endpoint for searching words
 
-const encode_utf8 = (s) => encodeURIComponent(s);
+const cacheHandler = new CacheHandler();        // Structure to handle the cache
+const MAXSIZE = 10;                             // Max amount of elements allowed in the cache
+let cache;                                      // Cache
 
+/**
+ * Encode text as an URI component
+ * 
+ * @param {string} text - Text to encode.
+ * @returns {string}      Encoded text.
+ */
+const encode_utf8 = (text) => encodeURIComponent(text);
+
+
+/**
+ * Sends a POST request to the server asking if 'text'
+ * appears in the index. It renders the response in a
+ * new tab.
+ * 
+ * @param {string} text - Text to search in the index.
+ */
 const inputEntered = (text) => {
   const e_text = encodeURIComponent(text);
   const searchURL = `${API_url}/${API_search}/q=${e_text}`;
 
   chrome.tabs.create({ url: searchURL })
     .catch(err => {
-      console.log('ERROR', err);
+      console.log('Unable to show the results.', err);
     });
 };
 
-const newCache = () => {
+/**
+ * Generates a new structure that represents an empty cache.
+ * It is an Object with some functionalities inherited of a double 
+ * linked list.
+ * 
+ * We use this plain structure in order to be able to stringify and 
+ * backup it into the storage. Otherwise we could have a class.
+ * Another option is to use indexDB, but I'm not really sure if we
+ * can access it from the extension.
+ * 
+ * @constructor
+ * @returns       An empty cache of MAXSIZE.
+ */
+const newCache = (maxSize) => {
   return {
-    dl_list: {},
-    head: null,
-    tail: null,
-    size: 0,
-    maxSize: MAXSIZE
+    dl_list: {},            // Double linked list
+    head: null,             // First item
+    tail: null,             // Last item
+    size: 0,                // Amount of items
+    maxSize: maxSize        // Maximum amount of items allowed
   };
 };
 
+/** 
+ * Retrieves the cache from the storage.
+ * This is executed each time the service_work wakes up. 
+ */
 const initStorageCache = chrome.storage.sync.get(['cache'])
   .then(items => {
     cache = JSON.parse(items.cache);
-  })
-  .catch(error => {
-    console.log("ERROR: retrieving the cache!", error);
   });
 
-const saveStorageCache = (cache2save) =>
-  chrome.storage.sync.set({ cache: JSON.stringify(cache2save) });
+/**
+ * Saves the cache stringified in the storage with the key 'cache'.
+ * 
+ * @param {Object} cache2save - Cache to save in the storage.
+ */
+async function saveStorageCache(cache2save) {
+  chrome.storage.sync.set({ cache: JSON.stringify(cache2save) })
+};
+
 
 /** Event listeners */
 
 /**
- * Creates a new index.
- * Creates a new cache.
+ * Creates a new index (if it does not exist) and a new cache. 
+ * It is executed only when the extension is installed.
  */
 chrome.runtime.onInstalled.addListener(() => {
-  fetch(`${API_url}/${API_newIndex}`, {
-    method: "POST",
-    body: JSON.stringify({}),
-    headers: {
-      'Content-Type': 'application/json',
-    }
-  })
-    .then(() => {
-      console.log("New index created.");
-      saveStorageCache(newCache())
-        .then(() => console.log("New cache backuped."));
+  if (cache == undefined) {
+    fetch(`${API_url}/${API_newIndex}`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: {
+        'Content-Type': 'application/json',
+      }
     })
-    .catch((error) => {
-      console.log("Unable to create the index or cache.", error)
-    });
+      .then((response) => {
+        console.log("Response", response);
+        return saveStorageCache(newCache(MAXSIZE));
+      })
+      .then(() => console.log("New cache backuped."))
+      .catch((error) => {
+        console.log("Unable to create the index or cache.", error)
+      });
+  }
 });
 
-/** Read a bit more abount async functions and refactor this function */
-async function storeRequest(request, sender) {
-  const md5 = request.hash;
+/** Tries to store the text received into request.text */
+async function storeRequest(data) {
+
+  /** If cache is not loaded or if it does not exist yet */
   if (cache == undefined) {
     try {
       await initStorageCache;
     } catch (e) {
-      console.log("ERROR", e);
-      cache = newCache();
+      cache = newCache(MAXSIZE);
     }
   }
-  if (cacheHandler.has_and_update(cache, md5))
+
+  /** Checks if cache has the hash, and resorts the cache in that case. */
+  if (cacheHandler.has_and_update(cache, data.hash))
     return { message: "Text already cached." };
 
-  data = {
-    text: request.text,
-    url: sender.tab.url,
-    title: sender.tab.title
-  }
-  text = request.text
-  fetch(`${API_url}/store`, {
-    method: "POST",
-    body: JSON.stringify(data),
-    headers: { 'Content-Type': 'application/json' }
-  })
-    .then(() => {
-      cacheHandler.add(cache, md5);
-      console.log("Hash added to the cache", cache);
-
-      saveStorageCache(cache)
-        .then(() => {
-          console.log("Cache backuped")
-          return { message: "Cache backuped" }
-        });
-    })
-    .catch((error) => {
-      console.log("Unable to store the text.", error)
-      return { message: "Unable to store the text." }
+  /** Sends the text to the server */
+  const data2send = {
+    text: data.text,
+    url: data.url,
+    title: data.title
+  };
+  try {
+    await fetch(`${API_url}/store`, {
+      method: "POST",
+      body: JSON.stringify(data2send),
+      headers: { 'Content-Type': 'application/json' }
     });
+  } catch (err) {
+    console.log("Error sending the text to the server.", err);
+    throw new Error(`Unable to store the text.`);
+  }
+
+  /** Updates and backups the cache */
+  cacheHandler.add(cache, data.hash);
+  try {
+    await saveStorageCache(cache);
+  } catch (err) {
+    console.log("Error when backuping the cache.", err);
+    throw new Error(`Unable to update the cache.`);
+  }
+
+  return { message: "Text stored and cache updated." };
 }
 
-/** It receives the message from the content script and,
- * if it is not cached, sends it to the server in order 
- * to add it to the index. */
+/** 
+ * Messages handler.
+ * 
+ * If request.method is 'store', then it must contain:
+ *   @param {string} hash  - Hash of the URL + text.
+ *   @param {string} text - Text to send to the server. 
+ *  
+ *   It receives the text from the content scripts and, if 
+ *   it is not cached, sends it to the server in order to 
+ *   add it to the index.
+ */
 chrome.runtime.onMessage.addListener(
   (request, sender, sendResponse) => {
     if (request.method != "store")
-      sendResponse(false);
+      return sendResponse(false);
 
-    const md5 = request.hash;
-    if (cache != undefined && cacheHandler.has_and_update(cache, md5))
+    const hash = request.hash;
+    if (cache != undefined && cacheHandler.has_and_update(cache, hash))
       return sendResponse({ message: "Text already cached." });
 
-    storeRequest(request, sender).then(
-      (response) => {
-        console.log("Response:", response);
-        sendResponse(response);
-      });
-    return true; // return true to send a response asynchronously
+    let data = {
+      hash: hash,
+      text: request.text,
+      url: sender.tab.url,
+      title: sender.tab.title
+    }
+
+    /** Tries to send the text to the server and to update and backup the cache */
+    storeRequest(data)
+      .then(sendResponse)
+      .catch((error) => sendResponse(`Unable to complete the process.\n ${error}`));
+
+    /** returns true to send a response asynchronously */
+    return true;
   });
 
-
+/** 
+ * Omnibox - onInputEntered - handler.
+ * It listens to the 'WER' keyword (defined in the manifest).
+ */
 chrome.omnibox.onInputEntered.addListener(inputEntered);

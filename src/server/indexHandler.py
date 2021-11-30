@@ -24,6 +24,26 @@ class Multiindex():
             content=TEXT
         )
 
+    def available(self, username=None):
+        """
+          Checks for the multiindex availability. If an username is
+          given, then it also check for the particular index
+          availability
+
+          :param username: name of the index from which you want
+          to check availability.
+
+          :rtype: bool
+        """
+        ret = self._path is not None and \
+            self._storage is not None and \
+            self._schema is not None
+
+        if username is not None:
+            return ret and self._storage.index_exists(username)
+
+        return ret
+
     def createIx(self, username: str, ovewrite: bool = False):
         """
           Creates an index in the storage path.

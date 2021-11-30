@@ -111,18 +111,25 @@ class CacheHandler {
 
 
 /** Global variables */
-const API_scheme = 'http';                      // Server scheme
-const API_host = 'localhost:8888';              // Server host and port 
-const API_url = `${API_scheme}://${API_host}`;  // Server complete URL
-const API_newIndex = 'newindex';                // Endpoint for creating a new index
-const API_search = 'search';                    // Endpoint for searching words
+const API_scheme = 'http';                      // Server scheme.
+const API_host = 'localhost:8888';              // Server host and port. 
+const API_url = `${API_scheme}://${API_host}`;  // Server complete URL.
+const API_newIndex = 'newindex';                // Endpoint for creating a new index.
+const API_search = 'search';                    // Endpoint for searching words.
 
-const cacheHandler = new CacheHandler();        // Structure to handle the cache
-const MAXSIZE = 10;                             // Max amount of elements allowed in the cache
-let cache;                                      // Cache
+// Endpoint for checking server availability.
+const API_serverAvailable = 'available';
+/** 
+ * Endpoint for checking index availability. 
+ * If we want to stop sharing the indices, we could send the username. */
+const API_indexAvailable = `${API_serverAvailable}/index`;
+
+const cacheHandler = new CacheHandler();        // Structure to handle the cache.
+const MAXSIZE = 10;                             // Max amount of elements allowed in the cache.
+let cache = null;                               // Cache.
 
 /**
- * Encode text as an URI component
+ * Encodes text as an URI component.
  * 
  * @param {string} text - Text to encode.
  * @returns {string}      Encoded text.
@@ -162,11 +169,11 @@ const inputEntered = (text) => {
  */
 const newCache = (maxSize) => {
   return {
-    dl_list: {},            // Double linked list
-    head: null,             // First item
-    tail: null,             // Last item
-    size: 0,                // Amount of items
-    maxSize: maxSize        // Maximum amount of items allowed
+    dl_list: {},            // Double linked list.
+    head: null,             // First item.
+    tail: null,             // Last item.
+    size: 0,                // Amount of items.
+    maxSize: maxSize        // Maximum amount of items allowed.
   };
 };
 
@@ -174,7 +181,7 @@ const newCache = (maxSize) => {
  * Retrieves the cache from the storage.
  * This is executed each time the service_work wakes up. 
  */
-const initStorageCache = chrome.storage.sync.get(['cache'])
+const retrieveCacheFromStorage = chrome.storage.sync.get(['cache'])
   .then(items => {
     cache = JSON.parse(items.cache);
   });
@@ -182,12 +189,70 @@ const initStorageCache = chrome.storage.sync.get(['cache'])
 /**
  * Saves the cache stringified in the storage with the key 'cache'.
  * 
- * @param {Object} cache2save - Cache to save in the storage.
+ * @param {Promise} cache2save - Cache to save in the storage.
  */
-async function saveStorageCache(cache2save) {
+async function backupCacheToStorage(cache2save) {
   chrome.storage.sync.set({ cache: JSON.stringify(cache2save) })
 };
 
+/**
+ * Attempts to create a new index in the server.
+ * 
+ * @returns {Promise} 
+ */
+async function createIndex() {
+  console.log("Creating a new index.");
+  return fetch(`${API_url}/${API_newIndex}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+/**
+ * Attempts to create a new cache and to backup it in the storage.
+ * The new cache is stored in the global variable 'cache'.
+ * 
+ * @returns {Promise}
+ */
+async function createCache() {
+  console.log("Creating a new cache.");
+  cache = newCache(MAXSIZE);
+  return backupCacheToStorage(newCache(MAXSIZE));
+}
+
+/**
+ * Attempts to initialize the cache. If the variable cache is not undefined,
+ * it checks if the index exists and if so, it does not do anything else.
+ * Otherwise, it creates the index and resets the cache.
+ */
+async function initializeCache() {
+
+  if (cache != undefined) {
+    /** If there is a local cache, it was retrieved from the storage, 
+     * so we should check whether it is synchronized with the server,
+     * instead of that (which requires some extra code) we asks for
+     * the existence of any index, assuming it is synchronized. */
+    try {
+      await fetch(`${API_url}/${API_indexAvailable}`, { method: "GET" });
+      return;
+
+    } catch (error) {
+      console.log("Index not available.", error);
+    }
+  }
+
+  /** 
+   * If the index is not available or if the cache is empty, 
+   * we must reset the cache and possibly create a new index */
+  try {
+    await createIndex();
+    await createCache();
+
+  } catch (error) {
+    console.log("Unable to create index or cache.", error);
+  }
+}
 
 /** Event listeners */
 
@@ -196,33 +261,26 @@ async function saveStorageCache(cache2save) {
  * It is executed only when the extension is installed.
  */
 chrome.runtime.onInstalled.addListener(() => {
-  if (cache == undefined) {
-    fetch(`${API_url}/${API_newIndex}`, {
-      method: "POST",
-      body: JSON.stringify({}),
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    })
-      .then((response) => {
-        console.log("Response", response);
-        return saveStorageCache(newCache(MAXSIZE));
-      })
-      .then(() => console.log("New cache backuped."))
-      .catch((error) => {
-        console.log("Unable to create the index or cache.", error)
-      });
-  }
+  /** Checks if the index is available. */
+  let server_available = fetch(
+    `${API_url}/${API_serverAvailable}`, { method: "GET" });
+
+  server_available.then(initializeCache)
+    .catch((error) => console.log("Unable to initialize cache.", error));
+
+  server_available.catch((error) =>
+    console.log("Unable to connect with the server.", error)
+  );
 });
 
 /** Tries to store the text received into request.text */
 async function storeRequest(data) {
 
-  /** If cache is not loaded or if it does not exist yet */
+  /** If cache is not loaded or if it does not exist yet. */
   if (cache == undefined) {
     try {
-      await initStorageCache;
-    } catch (e) {
+      await retrieveCacheFromStorage;
+    } catch (err) {
       cache = newCache(MAXSIZE);
     }
   }
@@ -231,7 +289,7 @@ async function storeRequest(data) {
   if (cacheHandler.has_and_update(cache, data.hash))
     return { message: "Text already cached." };
 
-  /** Sends the text to the server */
+  /** Sends the text to the server. */
   const data2send = {
     text: data.text,
     url: data.url,
@@ -248,16 +306,17 @@ async function storeRequest(data) {
     throw new Error(`Unable to store the text.`);
   }
 
-  /** Updates and backups the cache */
+  /** Updates and backups the cache. */
   cacheHandler.add(cache, data.hash);
   try {
-    await saveStorageCache(cache);
+    await backupCacheToStorage(cache);
   } catch (err) {
     console.log("Error when backuping the cache.", err);
     throw new Error(`Unable to update the cache.`);
   }
 
-  return { message: "Text stored and cache updated." };
+  console.log(cache);
+  return { message: "Text stored and cache updated.", cache: cache };
 }
 
 /** 
@@ -278,7 +337,7 @@ chrome.runtime.onMessage.addListener(
 
     const hash = request.hash;
     if (cache != undefined && cacheHandler.has_and_update(cache, hash))
-      return sendResponse({ message: "Text already cached." });
+      return sendResponse({ message: "Text already cached. So we updated the cache." });
 
     let data = {
       hash: hash,
@@ -292,7 +351,7 @@ chrome.runtime.onMessage.addListener(
       .then(sendResponse)
       .catch((error) => sendResponse(`Unable to complete the process.\n ${error}`));
 
-    /** returns true to send a response asynchronously */
+    /** Returns true to send a response asynchronously. */
     return true;
   });
 

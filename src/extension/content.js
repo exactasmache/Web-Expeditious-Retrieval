@@ -31,17 +31,15 @@ getPlainText = () => {
 storeText = (url) => {
   const ptext = getPlainText();
   const md5 = MD5(`${url} ${ptext}`);
-  console.log(ptext);
-  console.log(md5);
+  console.log("Text to send:", ptext);
+  console.log("Hash of the text:", md5);
   chrome.runtime.sendMessage(
     {
       method: "store",
       hash: md5,
       text: ptext
     },
-    (res) => {
-      console.log("RES", res)
-    });
+    (res) => console.log("The service worker returned:", res));
 };
 
 /**

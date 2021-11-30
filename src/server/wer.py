@@ -48,7 +48,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
     _index = Multiindex(_ix_path)
     _default_usr = 'Anonimous'
 
-    def error(self, code: int = 500, message: str = None):
+    def do_return_error(self, code: int = 500, message: str = None):
         """Returns an error response
 
           :param code: error code.
@@ -64,31 +64,63 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         else:
             self.end_headers()
 
-    def search(self):
+    def do_available(self):
+        """
+          Handles the /search request.
+
+          Returns true if the server is running, and if /index is appended to
+          the path, it also checks whether the index exists.
+        """
+        path = self.path
+        subpaths = path.split('/')
+
+        if len(subpaths) not in [2, 3]:
+            self.do_return_error(code=400)
+            pass
+
+        msg = "Resource not available."
+        ret = self._index is not None
+        if subpaths[-1] == 'index':
+            ret = ret and self._index.available(self._default_usr)
+            msg = "Index not available."
+        else:
+            ret = ret and self._index.available()
+
+        if ret:
+            self.send_response(200)
+
+        else:
+            body = {'message': msg}
+            self.do_return_error(code=503)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(body.encode('utf-8'))
+
+    def do_search(self):
         """Handles the /search request."""
         path = self.path
         subpaths = path.split('/')
 
         if len(subpaths) != 3:
-            self.error(400)
+            self.do_return_error(code=400)
             pass
 
         word = parse_qs(subpaths[-1])
         if 'q' not in word or word['q'] == []\
                 or len(word['q']) > 1:
-            self.error(400)
+            self.do_return_error(code=400)
             pass
 
         print(" > Searching", word['q'][0])
         try:
             res = self._index.search_word(self._default_usr, word['q'][0])
             if res is False:
-                self.error(500)
+                self.do_return_error(code=500)
                 pass
 
         except Exception as e:
             print(e)
-            self.error(500)
+            self.do_return_error(code=500)
             pass
 
         print("Result:", [r for r in res])
@@ -98,7 +130,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
 
-    def store(self, postvars: dict):
+    def do_store(self, postvars: dict):
         """Saves the document in the index _index
 
           :param postvars: dictionary with the url title and text of the
@@ -110,7 +142,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
             postvars['text']
         )
         if not res:
-            self.error(500)
+            self.do_return_error(code=500)
             pass
 
         data = {'message': 'Saved'}
@@ -127,18 +159,21 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         path = self.path
 
         if (not isinstance(path, bytes) and not isinstance(path, str)):
-            self.error(442)
+            self.do_return_error(code=442)
             pass
 
+        if path.startswith('/available'):
+            self.do_available()
+
         if path.startswith('/search'):
-            self.search()
+            self.do_search()
 
         elif path.startswith('/favicon.ico'):
             self.send_response(200)
             self.end_headers()
 
         else:
-            self.error(403)
+            self.do_return_error(code=403)
 
     def do_POST(self):
         """Handles POST requests."""
@@ -154,26 +189,28 @@ class WERRequestHandler(BaseHTTPRequestHandler):
                 postvars = json.loads(my_json)
             except Exception as e:
                 print(e)
-                self.error(500)
+                self.do_return_error(code=500)
 
             if path.startswith('/store'):
                 if not postvars or 'url' not in postvars.keys() or \
                         'text' not in postvars.keys() or \
                         'title' not in postvars.keys():
-                    self.error(400)
+                    self.do_return_error(code=400)
                     pass
                 try:
-                    self.store(postvars)
+                    self.do_store(postvars)
                 except Exception as e:
                     print(e)
-                    self.error(500)
+                    self.do_return_error(code=500)
 
             if path.startswith('/newindex'):
-                self._index.createIx(self._default_usr)
-                self.send_response(200)
+                if self._index.createIx(self._default_usr):
+                    self.send_response(201)
+                else:
+                    self.send_response(200)
                 self.end_headers()
         else:
-            self.error(406)
+            self.do_return_error(code=406)
 
     def do_OPTIONS(self):
         """Handles OPTIONS request."""

@@ -16,20 +16,21 @@ from render import Render
 import base64
 
 """
-  We are using a quite simple authentication schema, for wich it is enough
+  We are using a quite simple authentication schema, for which it is enough
   just to have some credentials shared between the server and the client.
 
-  We assume we do not want ask the client to get logged in. In which case we
-  should receive a pair username/password and return a kind of token, which
-  should be stored in the client. We are assuming that step is already done,
-  and we have the same token for every client. The user:password that generates
-  the token is test:test, and the token is the one stored as CREDENTIALS.
+  We assume we do not want to ask the client to get logged in before starting
+  using the extension. In which case we should receive a pair username/password
+  and return a kind of token, which should be stored in the client. Since we do
+  not distinguish among clients we are assuming that step is already done, and
+  we have the same token for every client. The user:password that generates the
+  token is test:test, and the token is the one stored as CREDENTIALS.
 
-  We do not know another way to get this without using an external library
-  such as auth0 or a more powerful framework, such as Flask or Django.
+  We should use an external library such as auth0 or a more powerful framework,
+  such as Flask or Django.
 
-  Note that we are not using http neither, so the security is almost
-  unexistent.
+  Note that we are not using HTTPS neither, so the security is almost
+  non-existent.
 """
 USER = 'test'
 PASS = 'test'
@@ -39,6 +40,7 @@ CREDENTIALS = f'Basic {B64.decode(encoding="UTF-8")}'
 
 class WERRequestHandler(BaseHTTPRequestHandler):
     """This class handles HTTP request for the WER service."""
+
     def __init__(self, ix_path, default_idx, *args, **kwargs):
         self._ix_path = ix_path
         self._index = Multiindex(self._ix_path)
@@ -70,8 +72,8 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         """
           Handles the /search request.
 
-          Returns true if the server is running and,, if '/index' is appended to
-          the path, it also checks whether the index exists.
+          Returns true if the server is running and,, if '/index' is appended
+          to the path, it also checks whether the index exists.
         """
         path = self.path
         subpaths = path.split('/')

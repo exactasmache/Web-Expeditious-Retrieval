@@ -339,12 +339,13 @@ async function storeRequest(data) {
   cacheHandler.add(cache, data.hash);
   try {
     await backupCacheToStorage(cache);
-    
+
   } catch (err) {
     console.log("Error when backuping the cache.", err);
     throw new Error(`Unable to update the cache.`);
   }
 
+  console.log("new Cache:", cache);
   return { message: "Text stored and cache updated.", cache: cache };
 }
 

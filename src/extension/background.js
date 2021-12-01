@@ -216,7 +216,7 @@ async function createIndex() {
   return fetch(`${API_url}/${API_newIndex}`, {
     method: "POST",
     credentials: 'include',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       'Authorization': CREDENTIALS
     },
@@ -248,16 +248,16 @@ async function initializeCache() {
      * so we should check whether it is synchronized with the server,
      * instead of that (which requires some extra code) we asks for
      * the existence of any index, assuming it is synchronized. */
-      let response = await fetch(`${API_url}/${API_indexAvailable}`, {
-        method: "GET",
-        credentials: 'include',
-        headers: {
-          'Authorization': CREDENTIALS
-        }
-      });
-      let ret = await response.json();
-      console.log(ret.message);
-      if (ret.status == STATUS_AVAILABLE) return;
+    let response = await fetch(`${API_url}/${API_indexAvailable}`, {
+      method: "GET",
+      credentials: 'include',
+      headers: {
+        'Authorization': CREDENTIALS
+      }
+    });
+    let ret = await response.json();
+    console.log(ret.message);
+    if (ret.status == STATUS_AVAILABLE) return;
   }
 
   /** 
@@ -279,7 +279,7 @@ async function initializeCache() {
  * It is executed only when the extension is installed.
  */
 chrome.runtime.onInstalled.addListener(() => {
-  
+
   /** Checks if the index is available. It is a kind of ping */
   let server_available = fetch(
     `${API_url}/${API_serverAvailable}`, {
@@ -325,7 +325,7 @@ async function storeRequest(data) {
       method: "POST",
       body: JSON.stringify(data2send),
       credentials: 'include',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Authorization': CREDENTIALS
       },
@@ -339,6 +339,7 @@ async function storeRequest(data) {
   cacheHandler.add(cache, data.hash);
   try {
     await backupCacheToStorage(cache);
+    
   } catch (err) {
     console.log("Error when backuping the cache.", err);
     throw new Error(`Unable to update the cache.`);

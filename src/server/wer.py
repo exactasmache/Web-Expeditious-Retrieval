@@ -70,7 +70,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         """
           Handles the /search request.
 
-          Returns true if the server is running, and if /index is appended to
+          Returns true if the server is running and,, if '/index' is appended to
           the path, it also checks whether the index exists.
         """
         path = self.path
@@ -85,11 +85,11 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         ret = self._index is not None
         if subpaths[-1] == 'index':
             ret = ret and self._index.available(self._default_idx)
-            msg = "Index not available."
-            status = "UNAVAILABLE"
         else:
             ret = ret and self._index.available()
-            msg = "Resource not available."
+
+        if not ret:
+            msg = "Index not available."
             status = "UNAVAILABLE"
 
         body = json.dumps({'message': msg, 'status': status})

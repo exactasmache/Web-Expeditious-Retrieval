@@ -1,52 +1,30 @@
+__author__ = "Marcelo Bianchetti"
+__version__ = "1.0.0"
+__email__ = "mbianchetti@dc.uba.ar"
+__status__ = "Testing"
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from cgi import parse_header, parse_multipart
 from urllib.parse import parse_qs
 from pprint import pformat
 import json
+from functools import partial
 
 from indexHandler import Multiindex
-
-
-def build_response(res: list = None):
-    """
-      Creates an html response with the listed results
-
-      :param res: list of results of the searching.
-      Every element must be a dictionary containing an url and a title.
-
-      Returns the html code.
-      :rtype: str
-    """
-
-    body = """ <!DOCTYPE html>
-              <html>
-                <head>
-                  <title>Results</title>
-                </head>
-                <body>
-                <h1>Results</h1>
-            """
-    if not res:
-        body += "<p>Sorry, no page was found using that word.</p>"
-
-    else:
-        body += "<ul>"
-        for r in res:
-            body += f'<a href=\"{r["url"]}\"><li>{r["title"]}</li></a>'
-        body += "</ul>"
-
-    body += """</body>
-            </html>
-          """
-    return body
+from render import Render
 
 
 class WERRequestHandler(BaseHTTPRequestHandler):
     """This class handles HTTP request for the WER service."""
-    _ix_path = 'indexdir'
-    _index = Multiindex(_ix_path)
-    _default_usr = 'Anonimous'
+    def __init__(self, ix_path, default_idx, *args, **kwargs):
+        self._ix_path = ix_path
+        self._index = Multiindex(self._ix_path)
+        self._default_idx = default_idx
+        self._render = Render()
+
+        # BaseHTTPRequestHandler calls do_GET **inside** __init__ !!!
+        # So we have to call super().__init__ after setting attributes.
+        super().__init__(*args, **kwargs)
 
     def do_return_error(self, code: int = 500, message: str = None):
         """Returns an error response
@@ -81,7 +59,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         msg = "Resource not available."
         ret = self._index is not None
         if subpaths[-1] == 'index':
-            ret = ret and self._index.available(self._default_usr)
+            ret = ret and self._index.available(self._default_idx)
             msg = "Index not available."
         else:
             ret = ret and self._index.available()
@@ -113,7 +91,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
 
         print(" > Searching", word['q'][0])
         try:
-            res = self._index.search_word(self._default_usr, word['q'][0])
+            res = self._index.search_word(self._default_idx, word['q'][0])
             if res is False:
                 self.do_return_error(code=500)
                 pass
@@ -124,7 +102,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
             pass
 
         print("Result:", [r for r in res])
-        body = build_response(res)
+        body = self._render.build_list_response(res)
         self.send_response(200)
         self.send_header('Content-type', 'text/html')
         self.end_headers()
@@ -137,7 +115,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
           document to be added.
         """
         res = self._index.add_document(
-            self._default_usr, postvars['url'],
+            self._default_idx, postvars['url'],
             postvars['title'],
             postvars['text']
         )
@@ -204,7 +182,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
                     self.do_return_error(code=500)
 
             if path.startswith('/newindex'):
-                if self._index.createIx(self._default_usr):
+                if self._index.createIx(self._default_idx):
                     self.send_response(201)
                 else:
                     self.send_response(200)
@@ -225,7 +203,15 @@ class WERRequestHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     hostName = 'localhost'
     serverPort = 8888
-    server = HTTPServer((hostName, serverPort), WERRequestHandler)
+
+    indexDir = 'indexdir'
+    defaultIdx = 'Anonimous'
+
+    # partially applies the first two arguments to the Handler
+    handler = partial(WERRequestHandler, indexDir, defaultIdx)
+
+    # .. then pass it to HTTPHandler as normal:
+    server = HTTPServer((hostName, serverPort), handler)
     print(f"Server started at {hostName}:{serverPort}")
     try:
         server.serve_forever()

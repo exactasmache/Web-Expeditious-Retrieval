@@ -40,6 +40,9 @@ to run all of them, or the following replacing _path_ and _test_to_run.py_.
 
 > python -m unittest tests/\<path\>/\<test\_to\_run.py\>
 
+The time went out, but several tests should be added in order to assure the correctness of the application. In particular integration tests using all the endpoints provided by the API: _newindex_, _search_, ...
+
+Regarding the frontend, we are installing _npm_ with the aim of using _Mocha_ and _Chai_ to test the different functionalities, but we have problems with _brew_ and the OS version, and solving them is taking us all day.
 
 ## Some assumptions and thoughts
  -  If the page has some time-dependent value or things like we can have one URL for several texts. Thus, since the relation between the URL and the _innerText_ is not 1:1, we are not able to use the URL instead of a hash. Anyway, since we are not storing the text in the index, we are not able to differentiate contents for the same URL.
@@ -50,7 +53,6 @@ to run all of them, or the following replacing _path_ and _test_to_run.py_.
 If this is not truth, and we want the cache to be shared among them, we should find another way.
 
  - As mentioned, we could improve the extension by reducing the text sent both in the search and in the store endpoints. For the lastone it is necessary to study the index deeper. We observed that it removes the punctuation marks among other things, so we could omit to send them.
-
 
 ## Installation
 The server requires python3.9 or earlier because it uses __\_\_file\_\___ to retrieve the abstract path to the script in order to create the index folder.

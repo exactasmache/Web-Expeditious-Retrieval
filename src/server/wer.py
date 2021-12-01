@@ -13,6 +13,29 @@ from functools import partial
 from indexHandler import Multiindex
 from render import Render
 
+import base64
+
+"""
+  We are using a quite simple authentication schema, for wich it is enough
+  just to have some credentials shared between the server and the client.
+
+  We assume we do not want ask the client to get logged in. In which case we
+  should receive a pair username/password and return a kind of token, which
+  should be stored in the client. We are assuming that step is already done,
+  and we have the same token for every client. The user:password that generates
+  the token is test:test, and the token is the one stored as CREDENTIALS.
+
+  We do not know another way to get this without using an external library
+  such as auth0 or a more powerful framework, such as Flask or Django.
+
+  Note that we are not using http neither, so the security is almost
+  unexistent.
+"""
+USER = 'test'
+PASS = 'test'
+B64 = base64.b64encode(f"{USER}:{PASS}".encode("UTF-8"))
+CREDENTIALS = f'Basic {B64.decode(encoding="UTF-8")}'
+
 
 class WERRequestHandler(BaseHTTPRequestHandler):
     """This class handles HTTP request for the WER service."""
@@ -41,6 +64,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
 
         else:
             self.end_headers()
+        pass
 
     def do_available(self):
         """
@@ -56,23 +80,24 @@ class WERRequestHandler(BaseHTTPRequestHandler):
             self.do_return_error(code=400)
             pass
 
-        msg = "Resource not available."
+        msg = "Index available."
+        status = "AVAILABLE"
         ret = self._index is not None
         if subpaths[-1] == 'index':
             ret = ret and self._index.available(self._default_idx)
             msg = "Index not available."
+            status = "UNAVAILABLE"
         else:
             ret = ret and self._index.available()
+            msg = "Resource not available."
+            status = "UNAVAILABLE"
 
-        if ret:
-            self.send_response(200)
-
-        else:
-            body = {'message': msg}
-            self.do_return_error(code=503)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(body.encode('utf-8'))
+        body = json.dumps({'message': msg, 'status': status})
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(body.encode('utf-8'))
+        pass
 
     def do_search(self):
         """Handles the /search request."""
@@ -107,6 +132,7 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/html')
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
+        pass
 
     def do_store(self, postvars: dict):
         """Saves the document in the index _index
@@ -131,27 +157,47 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(body.encode('utf-8'))
+        pass
+
+    def do_AUTHHEAD(self):
+        self.send_response(401)
+        self.send_header('WWW-Authenticate', 'Basic realm=\"Test\"')
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
 
     def do_GET(self):
         """Handles GET requests."""
         path = self.path
-
         if (not isinstance(path, bytes) and not isinstance(path, str)):
             self.do_return_error(code=442)
             pass
 
-        if path.startswith('/available'):
-            self.do_available()
+        auth = self.headers.get('Authorization')
 
-        if path.startswith('/search'):
-            self.do_search()
+        if auth is None:
+            self.do_AUTHHEAD()
+            self.wfile.write('no auth header received'.encode('utf-8'))
+            pass
 
-        elif path.startswith('/favicon.ico'):
-            self.send_response(200)
-            self.end_headers()
+        elif auth == CREDENTIALS:
+            if path.startswith('/available'):
+                self.do_available()
 
+            elif path.startswith('/search'):
+                self.do_search()
+
+            elif path.startswith('/favicon.ico'):
+                self.send_response(200)
+                self.end_headers()
+                pass
+
+            else:
+                self.do_return_error(code=403)
         else:
-            self.do_return_error(code=403)
+            self.do_AUTHHEAD()
+            self.wfile.write(auth.encode('utf-8'))
+            self.wfile.write('not authenticated'.encode('utf-8'))
+            pass
 
     def do_POST(self):
         """Handles POST requests."""
@@ -159,36 +205,50 @@ class WERRequestHandler(BaseHTTPRequestHandler):
         path = self.path
         postvars = {}
 
-        if ctype == 'application/json':
-            try:
-                length = int(self.headers.get('content-length'))
-                bytes_val = self.rfile.read(length)
-                my_json = bytes_val.decode('utf8')
-                postvars = json.loads(my_json)
-            except Exception as e:
-                print(e)
-                self.do_return_error(code=500)
+        auth = self.headers.get('Authorization')
 
-            if path.startswith('/store'):
-                if not postvars or 'url' not in postvars.keys() or \
-                        'text' not in postvars.keys() or \
-                        'title' not in postvars.keys():
-                    self.do_return_error(code=400)
-                    pass
+        if auth is None:
+            self.do_AUTHHEAD()
+            self.wfile.write('no auth header received'.encode('utf-8'))
+            pass
+
+        elif auth == CREDENTIALS:
+            if ctype == 'application/json':
                 try:
-                    self.do_store(postvars)
+                    length = int(self.headers.get('content-length'))
+                    bytes_val = self.rfile.read(length)
+                    my_json = bytes_val.decode('utf8')
+                    postvars = json.loads(my_json)
                 except Exception as e:
                     print(e)
                     self.do_return_error(code=500)
 
-            if path.startswith('/newindex'):
-                if self._index.createIx(self._default_idx):
-                    self.send_response(201)
-                else:
-                    self.send_response(200)
-                self.end_headers()
+                if path.startswith('/store'):
+                    if not postvars or 'url' not in postvars.keys() or \
+                            'text' not in postvars.keys() or \
+                            'title' not in postvars.keys():
+                        self.do_return_error(code=400)
+                        pass
+                    try:
+                        self.do_store(postvars)
+                    except Exception as e:
+                        print(e)
+                        self.do_return_error(code=500)
+
+                if path.startswith('/newindex'):
+                    if self._index.createIx(self._default_idx):
+                        self.send_response(201)
+                    else:
+                        self.send_response(200)
+                    self.end_headers()
+                    pass
+            else:
+                self.do_return_error(code=406)
         else:
-            self.do_return_error(code=406)
+            self.do_AUTHHEAD()
+            self.wfile.write(self.headers.get('Authorization'))
+            self.wfile.write('not authenticated'.encode('utf-8'))
+            pass
 
     def do_OPTIONS(self):
         """Handles OPTIONS request."""

@@ -111,6 +111,7 @@ class CacheHandler {
 
 
 /** Global variables */
+const STATUS_AVAILABLE = 'AVAILABLE';           // Available status
 const API_scheme = 'http';                      // Server scheme.
 const API_host = 'localhost:8888';              // Server host and port. 
 const API_url = `${API_scheme}://${API_host}`;  // Server complete URL.
@@ -126,7 +127,12 @@ const API_indexAvailable = `${API_serverAvailable}/index`;
 
 const cacheHandler = new CacheHandler();        // Structure to handle the cache.
 const MAXSIZE = 10;                             // Max amount of elements allowed in the cache.
-let cache = null;                               // Cache.
+let cache;                                      // Cache.
+
+/** Harcoded credentials for the pair test:test -> dGVzdDp0ZXN0 */
+const user = 'test';
+const pass = 'test';
+const CREDENTIALS = `Basic ${btoa(`${user}:${pass}`)}`;
 
 /**
  * Encodes text as an URI component.
@@ -150,7 +156,7 @@ const inputEntered = (text) => {
 
   chrome.tabs.create({ url: searchURL })
     .catch(err => {
-      console.log('Unable to show the results.', err);
+      console.log("Unable to show the results.", err);
     });
 };
 
@@ -183,7 +189,12 @@ const newCache = (maxSize) => {
  */
 const retrieveCacheFromStorage = chrome.storage.sync.get(['cache'])
   .then(items => {
-    cache = JSON.parse(items.cache);
+    console.log("Cache retrieved:", items);
+    if (items.cache != undefined)
+      cache = JSON.parse(items.cache);
+  })
+  .catch(error => {
+    console.log("Error retrieving cache:", error);
   });
 
 /**
@@ -204,8 +215,12 @@ async function createIndex() {
   console.log("Creating a new index.");
   return fetch(`${API_url}/${API_newIndex}`, {
     method: "POST",
+    credentials: 'include',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': CREDENTIALS
+    },
     body: JSON.stringify({}),
-    headers: { 'Content-Type': 'application/json' }
   });
 }
 
@@ -233,13 +248,16 @@ async function initializeCache() {
      * so we should check whether it is synchronized with the server,
      * instead of that (which requires some extra code) we asks for
      * the existence of any index, assuming it is synchronized. */
-    try {
-      await fetch(`${API_url}/${API_indexAvailable}`, { method: "GET" });
-      return;
-
-    } catch (error) {
-      console.log("Index not available.", error);
-    }
+      let response = await fetch(`${API_url}/${API_indexAvailable}`, {
+        method: "GET",
+        credentials: 'include',
+        headers: {
+          'Authorization': CREDENTIALS
+        }
+      });
+      let ret = await response.json();
+      console.log(ret.message);
+      if (ret.status == STATUS_AVAILABLE) return;
   }
 
   /** 
@@ -261,9 +279,16 @@ async function initializeCache() {
  * It is executed only when the extension is installed.
  */
 chrome.runtime.onInstalled.addListener(() => {
-  /** Checks if the index is available. */
+  
+  /** Checks if the index is available. It is a kind of ping */
   let server_available = fetch(
-    `${API_url}/${API_serverAvailable}`, { method: "GET" });
+    `${API_url}/${API_serverAvailable}`, {
+    method: "GET",
+    credentials: 'include',
+    headers: {
+      'Authorization': CREDENTIALS
+    }
+  });
 
   server_available.then(initializeCache)
     .catch((error) => console.log("Unable to initialize cache.", error));
@@ -299,7 +324,11 @@ async function storeRequest(data) {
     await fetch(`${API_url}/store`, {
       method: "POST",
       body: JSON.stringify(data2send),
-      headers: { 'Content-Type': 'application/json' }
+      credentials: 'include',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': CREDENTIALS
+      },
     });
   } catch (err) {
     console.log("Error sending the text to the server.", err);
@@ -315,7 +344,6 @@ async function storeRequest(data) {
     throw new Error(`Unable to update the cache.`);
   }
 
-  console.log(cache);
   return { message: "Text stored and cache updated.", cache: cache };
 }
 

@@ -12,6 +12,9 @@ from whoosh.qparser import QueryParser
 from whoosh.filedb.filestore import FileStorage
 
 
+BASEPATH = os.path.dirname(__file__)
+
+
 class Multiindex():
     """
       Handles the index. Allows multiple indices in the same storage.
@@ -21,12 +24,13 @@ class Multiindex():
       and a content. The content is not stored.
     """
 
-    def __init__(self, path: str):
+    def __init__(self, relative_path: str):
         """
-          :param path: a path to a directory. If the directory does not exist,
-          it is created.
+          :param relative_path: a path to a directory. If the directory does
+          not exist, it is created.
         """
-        self._path = path
+        self._path = os.path.join(BASEPATH, relative_path)
+
         if not os.path.isdir(self._path):
             os.mkdir(self._path)
 
@@ -197,5 +201,4 @@ class Multiindex():
                     shutil.rmtree(path)
                 except OSError:
                     os.remove(path)
-            print("remove", dir)
             os.rmdir(dir)
